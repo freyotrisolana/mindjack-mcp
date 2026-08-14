@@ -1,6 +1,7 @@
 {
   "name": "@mindjack/mcp",
-  "version": "1.1.0",
+  "version": "1.1.1",
+  "mcpName": "xyz.mindjack/mcp",
   "description": "On-chain risk and identity intelligence for Solana tokens, as MCP tools. Calibrated rug verdicts with a published hit rate, named wallets and their networks, the KOL trade ledger, and what happened to every launch we have indexed since March 2026.",
   "type": "module",
   "bin": {
