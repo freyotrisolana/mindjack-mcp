@@ -1,0 +1,38 @@
+{
+  "name": "@mindjack/mcp",
+  "version": "1.1.0",
+  "description": "On-chain risk and identity intelligence for Solana tokens, as MCP tools. Calibrated rug verdicts with a published hit rate, named wallets and their networks, the KOL trade ledger, and what happened to every launch we have indexed since March 2026.",
+  "type": "module",
+  "bin": {
+    "mindjack-mcp": "src/index.js"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "solana",
+    "memecoin",
+    "rug",
+    "onchain",
+    "trading-agent",
+    "x402"
+  ],
+  "license": "MIT",
+  "homepage": "https://api.mindjack.xyz",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/freyotrisolana/mindjack-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/freyotrisolana/mindjack-mcp/issues"
+  }
+}
