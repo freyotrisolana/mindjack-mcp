@@ -100,3 +100,4 @@ and how those ended.
 - API: <https://api.mindjack.xyz>
 - Endpoint guide an LLM can read in one fetch: <https://api.mindjack.xyz/llms.txt>
 - OpenAPI: <https://api.mindjack.xyz/v1/openapi.json>
+- Source, issues and releases: <https://github.com/freyotrisolana/mindjack-mcp>
