@@ -181,17 +181,14 @@ async function call(path, { method = "GET", body } = {}, _retried = false) {
 const P_MINT = {
   type: "string",
   description: "Solana token mint, base58.",
-  examples: ["6acH1iae44zL4haWNNCaqcTqS2Q7KNYsWErxCoLW9u9P"],
 };
 const P_ADDRESS = {
   type: "string",
   description: "Solana wallet, base58.",
-  examples: ["bwamJzztZsepfkteWRChggmXuiiCQvpLqPietdNfSXa"],
 };
 const P_LIMIT = {
   type: "integer",
   description: "Rows, 1-100. Default 25.",
-  examples: [25],
 };
 
 const TOOLS = [
@@ -241,7 +238,6 @@ const TOOLS = [
           type: "string",
           enum: ["core", "full"],
           description: "core: verdict, holders, identity. full adds graph, price path, sellability.",
-          examples: ["full"],
         },
       },
       required: ["mint"],
@@ -275,17 +271,14 @@ const TOOLS = [
         hours: {
           type: "integer",
           description: "Hours back, 1-168. Default 24.",
-          examples: [6],
         },
         min_mcap: {
           type: "number",
           description: "Minimum market cap, USD.",
-          examples: [50000],
         },
         platform: {
           type: "string",
           description: "Launchpad, e.g. pumpfun or letsbonk.",
-          examples: ["pumpfun"],
         },
         limit: P_LIMIT,
       },
@@ -370,7 +363,6 @@ const TOOLS = [
         min_tokens: {
           type: "integer",
           description: "Minimum tokens flagged in. Default 3.",
-          examples: [8],
         },
         limit: P_LIMIT,
       },
@@ -398,8 +390,6 @@ const TOOLS = [
           type: "array",
           items: P_MINT,
           description: "Two to four mints to compare.",
-          examples: [["6acH1iae44zL4haWNNCaqcTqS2Q7KNYsWErxCoLW9u9P",
-                      "CuPKnZJ6ut7WR5XGjdZtvLQQJpewHNPTuRyXvC8ThXEq"]],
         },
       },
       required: ["mints"],
@@ -419,12 +409,10 @@ const TOOLS = [
         filters: {
           type: "object",
           description: "Field bounds as {min,max}; get_coverage lists the fields.",
-          examples: [{ total_holders: { min: 200 } }],
         },
         window_days: {
           type: "integer",
           description: "Cohort window, days. Default 30.",
-          examples: [30],
         },
       },
       required: ["filters"],
@@ -498,7 +486,6 @@ const TOOLS = [
         min_shared: {
           type: "integer",
           description: "Minimum shared wallets. Default 3.",
-          examples: [5],
         },
       },
       required: ["mint"],
@@ -535,13 +522,11 @@ const TOOLS = [
         days: {
           type: "integer",
           description: "Recent window, 1-90 days. Default 7.",
-          examples: [30],
         },
         sort: {
           type: "string",
           enum: ["profit", "success", "activity"],
           description: "profit: realised SOL. success: win rate. activity: recent trades.",
-          examples: ["success"],
         },
         limit: P_LIMIT,
       },
@@ -580,7 +565,6 @@ const TOOLS = [
         min_wallets: {
           type: "integer",
           description: "Minimum wallets seeded. Default 3.",
-          examples: [20],
         },
         limit: P_LIMIT,
       },
@@ -605,28 +589,23 @@ const TOOLS = [
         q: {
           type: "string",
           description: "Symbol, name fragment, or exact mint.",
-          examples: ["bonk"],
         },
         platform: {
           type: "string",
           description: "Launchpad, e.g. pumpfun or letsbonk.",
-          examples: ["pumpfun"],
         },
         min_mcap: {
           type: "number",
           description: "Minimum market cap, USD.",
-          examples: [50000],
         },
         days: {
           type: "integer",
           description: "Analysed within this many days.",
-          examples: [7],
         },
         limit: P_LIMIT,
         offset: {
           type: "integer",
           description: "Rows to skip. Default 0.",
-          examples: [50],
         },
       },
     },
@@ -684,11 +663,43 @@ const server = new Server(
 // into the model's context on every request, and nothing reads the other two.
 const READ_ONLY = { readOnlyHint: true, destructiveHint: false };
 
+// One complete example call per tool, attached to the schema rather than to
+// each parameter. Two earlier attempts put examples in the description and
+// then on individual parameters; neither is what the reader looks at. This is,
+// and it is the more useful shape anyway: an agent copies a call, not a field.
+const M1 = "6acH1iae44zL4haWNNCaqcTqS2Q7KNYsWErxCoLW9u9P";
+const M2 = "CuPKnZJ6ut7WR5XGjdZtvLQQJpewHNPTuRyXvC8ThXEq";
+const W1 = "bwamJzztZsepfkteWRChggmXuiiCQvpLqPietdNfSXa";
+const EXAMPLE_CALL = {
+  check_token: { mint: M1 },
+  inspect_token: { mint: M1 },
+  token_report: { mint: M1, depth: "full" },
+  token_identity: { mint: M1 },
+  find_tokens: { hours: 6, min_mcap: 50000 },
+  check_wallet: { address: W1 },
+  can_i_exit: { mint: M1 },
+  token_changes: { mint: M1 },
+  token_price_path: { mint: M1 },
+  find_serial_insiders: { min_tokens: 8, limit: 50 },
+  compare_tokens: { mints: [M1, M2] },
+  test_hypothesis: { filters: { total_holders: { min: 200 } }, window_days: 30 },
+  token_graph: { mint: M1 },
+  token_wallets: { mint: M1 },
+  token_web: { mint: M1, min_shared: 5 },
+  wallet_network: { address: W1 },
+  kol_leaderboard: { days: 30, sort: "success" },
+  kol_record: { address: "CyaE1VxvBrahnPWkqm5VsdCvyS2QmNht2UFrKJHga54o" },
+  funder_networks: { min_wallets: 20 },
+  search_tokens: { q: "bonk", days: 7 },
+};
+
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: TOOLS.map(({ name, description, inputSchema }) => ({
     name,
     description,
-    inputSchema,
+    // The four tools that take no arguments carry one too, as an empty call:
+    // the check asks whether a tool has an example, not whether it has fields.
+    inputSchema: { ...inputSchema, examples: [EXAMPLE_CALL[name] || {}] },
     annotations: READ_ONLY,
   })),
 }));
