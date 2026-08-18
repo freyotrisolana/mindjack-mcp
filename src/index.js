@@ -280,6 +280,7 @@ const TOOLS = [
         min_mcap: {
           type: "number",
           description: "Minimum market cap, USD.",
+          examples: [50000],
         },
         platform: {
           type: "string",
@@ -397,6 +398,8 @@ const TOOLS = [
           type: "array",
           items: P_MINT,
           description: "Two to four mints to compare.",
+          examples: [["6acH1iae44zL4haWNNCaqcTqS2Q7KNYsWErxCoLW9u9P",
+                      "CuPKnZJ6ut7WR5XGjdZtvLQQJpewHNPTuRyXvC8ThXEq"]],
         },
       },
       required: ["mints"],
