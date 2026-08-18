@@ -1,12 +1,21 @@
 name: publish
 
 # Publishing from a laptop proves who uploaded the package and nothing about
-# where the bytes came from. Publishing from here attaches a signed provenance
-# attestation binding the tarball to this commit and this run, which anyone can
-# verify and which a stolen npm token cannot forge.
+# where the bytes came from. Publishing from here binds the tarball to this
+# commit and this run, with a signature anyone can verify and a stolen
+# credential cannot forge.
+#
+# There is no credential to steal. Trusted publishing authenticates over OIDC,
+# so npm issues a short-lived token to this workflow and nothing long-lived is
+# stored anywhere. Provenance comes with it, without asking: that is why there
+# is no --provenance flag and no NODE_AUTH_TOKEN below.
+#
+# Configured at npmjs.com under the package's Trusted Publisher settings, which
+# name this repository and this filename. Renaming this file breaks publishing
+# until the setting is updated to match.
 #
 # Triggered by a GitHub release so the version, the tag and the published
-# artifact are the same event. workflow_dispatch is there for a re-run.
+# artifact are one event. workflow_dispatch is there for a re-run.
 
 on:
   release:
@@ -15,8 +24,9 @@ on:
 
 permissions:
   contents: read
-  # The whole point. Without id-token, npm has no OIDC identity to sign with
-  # and --provenance fails rather than silently publishing unsigned.
+  # The whole point. Without id-token there is no OIDC identity, npm falls
+  # back to looking for a token that does not exist, and the publish fails
+  # rather than quietly shipping something unsigned.
   id-token: write
 
 jobs:
@@ -27,8 +37,13 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           registry-url: https://registry.npmjs.org
+
+      # Node 22 ships npm 10, and trusted publishing needs 11.5.1 or newer.
+      # Without this line the run fails at the last step with an auth error
+      # that says nothing about the version.
+      - run: npm install -g npm@latest
 
       # ci, not install: the committed lockfile is the record of what shipped,
       # and a publish that resolved something different would make it a lie.
@@ -36,10 +51,8 @@ jobs:
 
       # The gate that already exists, run before the tarball rather than after.
       # It launches the server over stdio, checks the handshake, the tool count
-      # and the schemas, and calls the live API. A publish that would ship a
+      # and the schemas, and calls the live API. A build that would ship a
       # broken server fails here instead of on somebody's machine.
       - run: node test-release.mjs
 
-      - run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - run: npm publish --access public
