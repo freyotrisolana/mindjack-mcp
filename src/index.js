@@ -174,6 +174,23 @@ async function call(path, { method = "GET", body } = {}, _retried = false) {
   return data;
 }
 
+// Shared parameter schemas. Every parameter carries a description because an
+// agent fills arguments from the schema and nothing else; an undescribed one
+// is a guess. Shared rather than repeated so the wording cannot drift between
+// the ten tools that take a mint.
+const P_MINT = {
+  type: "string",
+  description: "Solana token mint address, base58.",
+};
+const P_ADDRESS = {
+  type: "string",
+  description: "Solana wallet address, base58.",
+};
+const P_LIMIT = {
+  type: "integer",
+  description: "Rows to return, 1-100. Default 25.",
+};
+
 const TOOLS = [
   {
     name: "check_token",
@@ -182,10 +199,11 @@ const TOOLS = [
       "whose probability is a MEASURED frequency (see get_scorecard), the " +
       "concentration facts behind it, and how fast tokens in this band tend to " +
       "collapse — the exit window. Use when scanning; cheap enough for every " +
-      "token you see. Not for holder identities: that is inspect_token.",
+      "token you see. Not for holder identities: that is inspect_token." +
+      " Example: mint=<mint> returns its verdict, probability and exit window.",
     inputSchema: {
       type: "object",
-      properties: { mint: { type: "string", description: "Solana token mint address" } },
+      properties: { mint: P_MINT },
       required: ["mint"],
     },
     run: (a) => call(`/v1/screen/${a.mint}`),
@@ -196,10 +214,11 @@ const TOOLS = [
       "[$0.005] Who is involved in this token: top holders and supply, the " +
       "sniper / fresh-wallet / insider / early-buyer split, connected-group " +
       "topology, and tracked-trader activity with direction. Use after " +
-      "check_token flags something.",
+      "check_token flags something." +
+      " Example: mint=<mint> returns holders, the sniper/insider split and clusters.",
     inputSchema: {
       type: "object",
-      properties: { mint: { type: "string" } },
+      properties: { mint: P_MINT },
       required: ["mint"],
     },
     run: (a) => call(`/v1/inspect/${a.mint}`),
@@ -212,12 +231,17 @@ const TOOLS = [
       "adds the outcome path, live sellability and the wallet graph. Cheaper " +
       "than the parts and one round trip instead of three or six. Use once a " +
       "token is worth a real look; keep using check_token to decide which ones " +
-      "those are.",
+      "those are." +
+      " Example: mint=<mint>, depth=\"full\" returns everything in one call.",
     inputSchema: {
       type: "object",
       properties: {
-        mint: { type: "string" },
-        depth: { type: "string", enum: ["core", "full"] },
+        mint: P_MINT,
+        depth: {
+          type: "string",
+          enum: ["core", "full"],
+          description: "core ($0.025) is verdict + holders + identity. full ($0.07) adds the wallet graph, price path and sellability. Default core.",
+        },
       },
       required: ["mint"],
     },
@@ -230,10 +254,11 @@ const TOOLS = [
       "[$0.025] Who is BEHIND this token. What its largest holders did in earlier " +
       "launches, which sibling tokens the same wallets ran and how those ended, " +
       "and the measured upside band. The decision-point call. Coverage varies and " +
-      "is reported per call; an empty result is free.",
+      "is reported per call; an empty result is free." +
+      " Example: mint=<mint> returns what its holders ran before.",
     inputSchema: {
       type: "object",
-      properties: { mint: { type: "string" } },
+      properties: { mint: P_MINT },
       required: ["mint"],
     },
     run: (a) => call(`/v1/identity/${a.mint}`),
@@ -243,12 +268,24 @@ const TOOLS = [
     description:
       "[$0.005] Find candidates: recently analysed tokens, each already carrying a " +
       "verdict, so you can rank locally before paying for depth. Filters: hours " +
-      "(1-168), min_mcap, platform, limit (1-100).",
+      "(1-168), min_mcap, platform, limit (1-100)." +
+      " Example: hours=6, min_mcap=50000 returns the last six hours above $50k.",
     inputSchema: {
       type: "object",
       properties: {
-        hours: { type: "number" }, min_mcap: { type: "number" },
-        platform: { type: "string" }, limit: { type: "number" },
+        hours: {
+          type: "integer",
+          description: "How far back to look, 1-168 hours. Default 24.",
+        },
+        min_mcap: {
+          type: "number",
+          description: "Minimum market cap in USD. Omit for no floor.",
+        },
+        platform: {
+          type: "string",
+          description: "Launchpad to filter by, e.g. pumpfun or letsbonk. Omit for all.",
+        },
+        limit: P_LIMIT,
       },
     },
     run: (a) => {
@@ -263,10 +300,11 @@ const TOOLS = [
     description:
       "[$0.006] What we know about a wallet across every token we indexed: how many " +
       "launches it appeared in, how many ran, which roles it recurs in, and its " +
-      "realised record. Use to vet a large holder or a wallet you might copy.",
+      "realised record. Use to vet a large holder or a wallet you might copy." +
+      " Example: address=<wallet> returns its record across every token we indexed.",
     inputSchema: {
       type: "object",
-      properties: { address: { type: "string" } },
+      properties: { address: P_ADDRESS },
       required: ["address"],
     },
     run: (a) => call(`/v1/wallet/${a.address}`),
@@ -280,10 +318,11 @@ const TOOLS = [
       "the worst rung: clear / elevated / thin / trapped / blocked. Use this at " +
       "the trigger — every other tool here tells you what happened to tokens like " +
       "this one, this one tells you whether you can get out of this one. Quotes " +
-      "only, nothing is signed. Not cached, so it takes a few hundred ms.",
+      "only, nothing is signed. Not cached, so it takes a few hundred ms." +
+      " Example: mint=<mint> returns a verdict and what a round trip costs.",
     inputSchema: {
       type: "object",
-      properties: { mint: { type: "string" } },
+      properties: { mint: P_MINT },
       required: ["mint"],
     },
     run: (a) => call(`/v1/exit/${a.mint}`),
@@ -294,10 +333,11 @@ const TOOLS = [
       "[$0.025] Who sold since we analysed it. Reads the chain right now and diffs " +
       "the large positions against what we recorded. Use when a cached read feels " +
       "stale, or to see whether concentrated wallets are exiting a position you " +
-      "hold. The only call that touches the chain live.",
+      "hold. The only call that touches the chain live." +
+      " Example: mint=<mint> returns who sold since we analysed it.",
     inputSchema: {
       type: "object",
-      properties: { mint: { type: "string" } },
+      properties: { mint: P_MINT },
       required: ["mint"],
     },
     run: (a) => call(`/v1/changes/${a.mint}`),
@@ -307,10 +347,11 @@ const TOOLS = [
     description:
       "[$0.005] What the token did after we called it: peak, drawdown from peak, " +
       "and where it stands now, at 4-5 second resolution. Our feed starts at " +
-      "analysis, so the bonding-curve phase before that is not included.",
+      "analysis, so the bonding-curve phase before that is not included." +
+      " Example: mint=<mint> returns peak, drawdown and where it stands.",
     inputSchema: {
       type: "object",
-      properties: { mint: { type: "string" } },
+      properties: { mint: P_MINT },
       required: ["mint"],
     },
     run: (a) => call(`/v1/price/${a.mint}`),
@@ -324,12 +365,16 @@ const TOOLS = [
       "the count alone puts automation on top: the highest is flagged in 1,642 " +
       "tokens and also holds 4,091. Read insider_in against also_held — close " +
       "together is a real serial insider, far apart is a bot that buys " +
-      "everything early.",
+      "everything early." +
+      " Example: min_tokens=8, limit=50 returns the fifty most repeated.",
     inputSchema: {
       type: "object",
       properties: {
-        min_tokens: { type: "integer", description: "minimum tokens flagged in (default 3)" },
-        limit: { type: "integer", description: "rows, max 100 (default 25)" },
+        min_tokens: {
+          type: "integer",
+          description: "Only wallets flagged as an insider in at least this many tokens. Default 3.",
+        },
+        limit: P_LIMIT,
       },
     },
     run: (a) => {
@@ -347,10 +392,17 @@ const TOOLS = [
       "the wallets appearing in more than one, each with the role it played in " +
       "each. Weigh the roles rather than the count: shared holders are common, " +
       "a wallet that was an insider in one and a sniper in the next is not. " +
-      "Mints outside our index come back named in not_covered.",
+      "Mints outside our index come back named in not_covered." +
+      " Example: mints=[<mint>,<mint>] returns the wallets in both and their roles.",
     inputSchema: {
       type: "object",
-      properties: { mints: { type: "array", items: { type: "string" } } },
+      properties: {
+        mints: {
+          type: "array",
+          items: P_MINT,
+          description: "Two to four token mints to compare.",
+        },
+      },
       required: ["mints"],
     },
     run: (a) => call("/v1/compare", { method: "POST", body: { mints: a.mints } }),
@@ -361,15 +413,19 @@ const TOOLS = [
       "[$0.025] Research, not screening. Describe the shape of token you care about " +
       "and get what measurably happened to the matching cohort: collapse rate " +
       "against the base rate, peak-gain percentiles, time to peak, collapse speed. " +
-      "Filters take {min,max} bounds; get_coverage lists the queryable fields.",
+      "Filters take {min,max} bounds; get_coverage lists the queryable fields." +
+      " Example: filters={\"total_holders\":{\"min\":200}} returns what happened to that cohort.",
     inputSchema: {
       type: "object",
       properties: {
         filters: {
           type: "object",
-          description: 'e.g. {"controlled_supply_pct":{"min":50},"total_holders":{"min":200}}',
+          description: 'Field bounds as {min,max}. get_coverage lists the queryable fields. Example: {"controlled_supply_pct":{"min":50},"total_holders":{"min":200}}',
         },
-        window_days: { type: "number" },
+        window_days: {
+          type: "integer",
+          description: "How far back the cohort is drawn from, in days. Default 30.",
+        },
       },
       required: ["filters"],
     },
@@ -380,7 +436,8 @@ const TOOLS = [
     description:
       "[free] Our measured hit rate per risk band, and how fast each band tends to " +
       "collapse. Read this to decide how much weight to give our verdicts. Most " +
-      "risk APIs ask you to trust a score; this one shows how it performed.",
+      "risk APIs ask you to trust a score; this one shows how it performed." +
+      " Example: no arguments; returns the hit rate per band and the base rate.",
     inputSchema: { type: "object", properties: {} },
     run: () => call("/v1/scorecard"),
   },
@@ -392,7 +449,8 @@ const TOOLS = [
       "that call costs when you make it yourself. Call this before paying for " +
       "anything — it is served by the same handlers as the paid tools, so it is " +
       "what you would actually get, not an illustration. The token never changes, " +
-      "so use get_coverage for freshness and this for depth.",
+      "so use get_coverage for freshness and this for depth." +
+      " Example: no arguments and no key; returns one real token answered in full.",
     inputSchema: { type: "object", properties: {} },
     run: () => call("/v1/sample"),
   },
@@ -404,10 +462,11 @@ const TOOLS = [
       "inspect_token tells you WHO holds it; this tells you how they are " +
       "connected, and whether a distributed-looking holder set is really one " +
       "person. Not a first look — come here when the concentration numbers look " +
-      "wrong and you need the shape.",
+      "wrong and you need the shape." +
+      " Example: mint=<mint> returns edges, clusters and wash-trading wallets.",
     inputSchema: {
       type: "object",
-      properties: { mint: { type: "string" } },
+      properties: { mint: P_MINT },
       required: ["mint"],
     },
     run: (a) => call(`/v1/graph/${a.mint}`),
@@ -419,10 +478,11 @@ const TOOLS = [
       "insiders, snipers, early buyers, fresh wallets, wash traders and tracked " +
       "KOLs, each carrying its funder (exchanges named), link count and cluster. " +
       "Lists cap at 100 per class; *_total fields carry the real counts. Use " +
-      "when a count from check_token made you ask WHO.",
+      "when a count from check_token made you ask WHO." +
+      " Example: mint=<mint> returns the named wallets per class with funders.",
     inputSchema: {
       type: "object",
-      properties: { mint: { type: "string" } },
+      properties: { mint: P_MINT },
       required: ["mint"],
     },
     run: (a) => call(`/v1/wallets/${a.mint}`),
@@ -434,12 +494,16 @@ const TOOLS = [
       "wallets, with the shared wallets themselves, each connected token's " +
       "outcome and the highest market cap our snapshots recorded. Use when " +
       "token_identity said this token shares wallets with earlier launches and " +
-      "you need to know which launches and which wallets.",
+      "you need to know which launches and which wallets." +
+      " Example: mint=<mint>, min_shared=5 returns the launches tied to it.",
     inputSchema: {
       type: "object",
       properties: {
-        mint: { type: "string" },
-        min_shared: { type: "number", description: "Minimum shared wallets per connection (default 3)" },
+        mint: P_MINT,
+        min_shared: {
+          type: "integer",
+          description: "Only launches sharing at least this many wallets with it. Default 3.",
+        },
       },
       required: ["mint"],
     },
@@ -454,10 +518,11 @@ const TOOLS = [
       "[$0.025] Who one wallet is wired to, across the whole index: direct " +
       "counterparts with interaction counts, shared tokens and transfer " +
       "direction where the chain shows it, plus a bounded second hop. " +
-      "check_wallet says what it did; this says who it moves with.",
+      "check_wallet says what it did; this says who it moves with." +
+      " Example: address=<wallet> returns who it moves with, plus a second hop.",
     inputSchema: {
       type: "object",
-      properties: { address: { type: "string" } },
+      properties: { address: P_ADDRESS },
       required: ["address"],
     },
     run: (a) => call(`/v1/wallet/${a.address}/network`),
@@ -468,13 +533,21 @@ const TOOLS = [
       "[$0.02/page] Every tracked KOL wallet, ranked from the recorded trades: " +
       "lifetime realized SOL, per-token win rate on NET realized SOL, and a " +
       "recent-activity window. Sort by profit, success or activity. Use to " +
-      "build or refresh a copy-trading watchlist.",
+      "build or refresh a copy-trading watchlist." +
+      " Example: days=30, sort=\"success\" ranks by win rate over the last month.",
     inputSchema: {
       type: "object",
       properties: {
-        days: { type: "number", description: "Recent window in days (1-90, default 7)" },
-        sort: { type: "string", enum: ["profit", "success", "activity"] },
-        limit: { type: "number" },
+        days: {
+          type: "integer",
+          description: "Recent-activity window, 1-90 days. Default 7.",
+        },
+        sort: {
+          type: "string",
+          enum: ["profit", "success", "activity"],
+          description: "profit ranks by realised SOL, success by per-token win rate, activity by recent trades. Default profit.",
+        },
+        limit: P_LIMIT,
       },
     },
     run: (a) => {
@@ -490,10 +563,11 @@ const TOOLS = [
       "[$0.02] One tracked KOL in depth: lifetime stats, per-token history " +
       "rolled up from every recorded trade (buys, sells, volume, realized SOL) " +
       "and the latest trades raw. An address we do not track answers null and " +
-      "costs nothing; check_wallet covers any wallet.",
+      "costs nothing; check_wallet covers any wallet." +
+      " Example: address=<kol wallet> returns the per-token history for that KOL.",
     inputSchema: {
       type: "object",
-      properties: { address: { type: "string" } },
+      properties: { address: P_ADDRESS },
       required: ["address"],
     },
     run: (a) => call(`/v1/kol/${a.address}`),
@@ -504,12 +578,16 @@ const TOOLS = [
       "[$0.025/page] Funders ranked by how many fresh wallets they seeded " +
       "across the whole index, each labelled when we know the exchange behind " +
       "it. A funder inside one token is a line item; across the index it is a " +
-      "desk. A null label with a high count is the shape worth opening.",
+      "desk. A null label with a high count is the shape worth opening." +
+      " Example: min_wallets=20 returns the funders behind twenty or more.",
     inputSchema: {
       type: "object",
       properties: {
-        min_wallets: { type: "number", description: "Minimum wallets seeded (default 3)" },
-        limit: { type: "number" },
+        min_wallets: {
+          type: "integer",
+          description: "Only funders that seeded at least this many fresh wallets. Default 3.",
+        },
+        limit: P_LIMIT,
       },
     },
     run: (a) => {
@@ -525,16 +603,32 @@ const TOOLS = [
       "[$0.005/page] Find a token anywhere in the analysed catalogue by symbol, " +
       "name fragment, or exact mint, with platform, size and age filters. The " +
       "finding aid: it tells you which mint is worth a real call. find_tokens " +
-      "answers 'what just migrated'; this answers 'find me that token'.",
+      "answers 'what just migrated'; this answers 'find me that token'." +
+      " Example: q=\"bonk\", days=7 finds tokens matching bonk from the last week.",
     inputSchema: {
       type: "object",
       properties: {
-        q: { type: "string", description: "Symbol, name fragment, or exact mint" },
-        platform: { type: "string" },
-        min_mcap: { type: "number" },
-        days: { type: "number" },
-        limit: { type: "number" },
-        offset: { type: "number" },
+        q: {
+          type: "string",
+          description: "Symbol, name fragment, or an exact mint address.",
+        },
+        platform: {
+          type: "string",
+          description: "Launchpad to filter by, e.g. pumpfun or letsbonk. Omit for all.",
+        },
+        min_mcap: {
+          type: "number",
+          description: "Minimum market cap in USD. Omit for no floor.",
+        },
+        days: {
+          type: "integer",
+          description: "Only tokens analysed within this many days. Omit for the whole index.",
+        },
+        limit: P_LIMIT,
+        offset: {
+          type: "integer",
+          description: "Rows to skip, for paging. Default 0.",
+        },
       },
     },
     run: (a) => {
@@ -550,7 +644,8 @@ const TOOLS = [
       "[free] What we hold and how fresh, plus a live example mint that is " +
       "guaranteed to have data. Call this first. We index every pump.fun and " +
       "letsbonk migration since our start date — testing with an older token you " +
-      "already know will return nothing and tell you nothing about us.",
+      "already know will return nothing and tell you nothing about us." +
+      " Example: no arguments; returns the index window and a mint that works.",
     inputSchema: { type: "object", properties: {} },
     run: () => call("/v1/coverage"),
   },
@@ -559,7 +654,8 @@ const TOOLS = [
     description:
       "[free] Credits remaining on your key. There is no free allowance: a new " +
       "key starts at zero and is funded with a USDC deposit, so a balance of 0 " +
-      "means the paid tools will answer 402 until you top up.",
+      "means the paid tools will answer 402 until you top up." +
+      " Example: no arguments; returns the credits left on your key.",
     inputSchema: { type: "object", properties: {} },
     run: () => call("/v1/credits/balance"),
   },
@@ -583,8 +679,21 @@ const server = new Server(
   { capabilities: { tools: {} } }
 );
 
+// Every tool here reads. Nothing writes, signs, or moves anything, and
+// can_i_exit only asks Jupiter for a quote. Declaring that is not decoration:
+// the MCP spec treats an ABSENT destructiveHint as destructive, so without
+// these a client is entitled to warn before every call and a scanner cannot
+// call the surface safe. Two hints and no more: every field here is loaded
+// into the model's context on every request, and nothing reads the other two.
+const READ_ONLY = { readOnlyHint: true, destructiveHint: false };
+
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: TOOLS.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })),
+  tools: TOOLS.map(({ name, description, inputSchema }) => ({
+    name,
+    description,
+    inputSchema,
+    annotations: READ_ONLY,
+  })),
 }));
 
 server.setRequestHandler(CallToolRequestSchema, async (req) => {
