@@ -20,11 +20,11 @@ and is never required.
 
 ## Supported versions
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 1.2.x   | Yes                |
-| 1.1.x   | Security fixes only |
-| < 1.1   | No                 |
+| Version | Supported           |
+| ------- | ------------------- |
+| 1.3.x   | Yes                 |
+| 1.2.x   | Security fixes only |
+| < 1.2   | No                  |
 
 This package is a thin client over `https://api.mindjack.xyz`. A fix to the
 hosted API reaches every caller without a release; a fix to this package needs
