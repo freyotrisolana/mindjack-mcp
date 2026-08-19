@@ -140,12 +140,14 @@ try {
         RESOURCES.every((u) => uris.includes(u)), uris.join(" "));
   const read = await rpc("resources/read", { uri: "mindjack://scorecard" });
   const text = read.result?.contents?.[0]?.text || "";
-  check("a resource reads back real content", text.length > 200,
-        text.length + " bytes");
+  // Length alone is not evidence. A Cloudflare block page is 468 bytes and
+  // sailed through "more than 200 bytes" while carrying no calibration at
+  // all — the check passed on the proof that the API was unreachable.
   let bands = null;
   try { bands = JSON.parse(text).bands; } catch {}
-  check("and it is the calibration, parsed", Array.isArray(bands),
-        Array.isArray(bands) ? bands.length + " bands" : "unparseable");
+  check("a resource reads back the calibration", Array.isArray(bands),
+        Array.isArray(bands) ? bands.length + " bands"
+                             : "not JSON: " + text.slice(0, 120).replace(/\s+/g, " "));
 
   console.log("\nPrompts");
   const pl = await rpc("prompts/list", {});
@@ -167,7 +169,16 @@ try {
     const out = await rpc("tools/call", { name, arguments: args });
     const result = out.result || {};
     const txt = result.content?.[0]?.text || "";
-    let parsed; try { parsed = JSON.parse(txt); } catch { parsed = { raw: txt.slice(0, 120) }; }
+    let parsed;
+    try {
+      parsed = JSON.parse(txt);
+    } catch {
+      // Keep enough of it to name the cause. This run failed with
+      // "non_json_response" and nothing else, and the answer — an edge
+      // network refusing the runner before the request reached us — was only
+      // visible by reproducing it by hand afterwards.
+      parsed = { raw: txt.slice(0, 200).replace(/\s+/g, " ") };
+    }
     return { result, parsed };
   }
 
