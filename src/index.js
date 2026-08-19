@@ -23,8 +23,13 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
   CallToolRequestSchema,
+  GetPromptRequestSchema,
+  ListPromptsRequestSchema,
+  ListResourcesRequestSchema,
   ListToolsRequestSchema,
+  ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import { OUTPUT_SCHEMAS } from "./output-schemas.js";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -616,6 +621,88 @@ const TOOLS = [
       return call(`/v1/search${q ? "?" + q : ""}`);
     },
   },
+  // ChatGPT's deep research and company knowledge modes look for two tools by
+  // name, `search` and `fetch`, and connect to nothing without them. Asked to
+  // learn Mindjack, ChatGPT reported there was nothing here for it: twenty-four
+  // tools, and not the two it looks for.
+  //
+  // Aliases, not new products. Same endpoints, same prices and same billing as
+  // search_tokens and token_report; giving them their own price would have
+  // added a number that could disagree with the published list.
+  {
+    name: "search",
+    description:
+      "[$0.005/page] Find Solana tokens in the analysed catalogue by symbol, " +
+      "name, or exact mint. Returns {id, title, url} rows; pass an id to " +
+      "`fetch` for the full document. Same endpoint and same price as " +
+      "search_tokens, in the shape research clients expect.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Symbol, name fragment, or an exact mint address.",
+        },
+        limit: P_LIMIT,
+      },
+      required: ["query"],
+    },
+    run: async (a) => {
+      const params = new URLSearchParams();
+      if (a.query) params.set("q", a.query);
+      if (a.limit !== undefined && a.limit !== null) params.set("limit", a.limit);
+      const out = await call(`/v1/search?${params.toString()}`);
+      if (!out || out.error) return out;
+      const results = (out.tokens || [])
+        .map((t) => ({ t, url: tokenUrl(t.mint) }))
+        // A row we cannot link is a row we cannot cite, so it is dropped
+        // rather than emitted with a blank or a broken address.
+        .filter(({ url }) => url)
+        .map(({ t, url }) => ({
+          id: t.mint,
+          title: [t.symbol, t.name].filter(Boolean).join(" — ") || t.mint,
+          url,
+        }));
+      return { results, count: results.length, says: out.says, _meta: out._meta };
+    },
+  },
+  {
+    name: "fetch",
+    description:
+      "[$0.025] Everything Mindjack holds on one token as a single document: " +
+      "the calibrated rug verdict with its measured hit rate, who is holding " +
+      "and how they are connected, and whether it can still be sold. Takes an " +
+      "id from `search` — a Solana mint address. Same endpoint and price " +
+      "as token_report.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: {
+          type: "string",
+          description: "A Solana mint address, usually from `search`.",
+        },
+      },
+      required: ["id"],
+    },
+    run: async (a) => {
+      const out = await call(`/v1/report/${encodeURIComponent(a.id || "")}`);
+      if (!out || out.error) return out;
+      const screen = out.screen || {};
+      const identity = out.identity || {};
+      const mint = screen.mint || identity.mint || out.mint || "";
+      const title =
+        [screen.symbol || identity.symbol, screen.name || identity.name]
+          .filter(Boolean)
+          .join(" — ") || mint || "token";
+      return {
+        id: mint,
+        title,
+        url: tokenUrl(mint),
+        text: JSON.stringify(out, null, 2),
+        metadata: out._meta,
+      };
+    },
+  },
   {
     name: "get_coverage",
     description:
@@ -650,9 +737,42 @@ const PKG_VERSION = (() => {
   }
 })();
 
+// Handed to the model once, at the handshake, instead of being repeated in
+// twenty-six descriptions. It says the three things that are not derivable
+// from a tool list: what the index actually contains, that the numbers are
+// measured frequencies rather than opinions, and which order the tools go in.
+// Kept short on purpose — it is in the context of every request that follows.
+const INSTRUCTIONS = [
+  "Mindjack answers from a point-in-time record of Solana launches: holder",
+  "distribution, insider, fresh-wallet and sniper detection as they stood at",
+  "the moment each token migrated. That state cannot be rebuilt from the chain",
+  "afterwards, which is why the window is the product.",
+  "",
+  "Call get_coverage first. It is free and returns the window, what is in it,",
+  "and a live mint that is guaranteed to have data. A token from outside the",
+  "window answers coverage=none, which is a real answer and is never charged —",
+  "check _meta.coverage before reading a body as a verdict.",
+  "",
+  "rug_probability_pct is a MEASURED collapse frequency for a calibrated band,",
+  "not an opinion and not a per-token risk starting at zero. The safest band",
+  "still rugged about 35% of the time and the universe base rate is 45%, so a",
+  "filter under ~35 matches nothing. get_scorecard publishes every band.",
+  "",
+  "Order that works: find_tokens for candidates, check_token on each,",
+  "inspect_token on the few that flag, token_identity at the decision point.",
+  "check_wallet vets a counterparty at any stage. can_i_exit before buying",
+  "anything you intend to sell.",
+  "",
+  "Prices are per call and stated in each description. Nothing is charged for",
+  "a failed call, an empty result, or a token we do not hold.",
+].join("\n");
+
 const server = new Server(
   { name: "mindjack", version: PKG_VERSION },
-  { capabilities: { tools: {} } }
+  {
+    capabilities: { tools: {}, resources: {}, prompts: {} },
+    instructions: INSTRUCTIONS,
+  }
 );
 
 // Every tool here reads. Nothing writes, signs, or moves anything, and
@@ -670,6 +790,17 @@ const READ_ONLY = { readOnlyHint: true, destructiveHint: false };
 const M1 = "6acH1iae44zL4haWNNCaqcTqS2Q7KNYsWErxCoLW9u9P";
 const M2 = "CuPKnZJ6ut7WR5XGjdZtvLQQJpewHNPTuRyXvC8ThXEq";
 const W1 = "bwamJzztZsepfkteWRChggmXuiiCQvpLqPietdNfSXa";
+const TOKEN_PAGE = "https://mindjack.xyz/token/";
+// base58 has no 0, O, I or l, and a Solana address is 32-44 of the rest.
+const BASE58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+// A link to the page for a mint, or nothing if that is not a mint. The value
+// comes from our own mirror, so in practice it is always an address — this
+// does not rely on that. The url is rendered by whichever client asked, and a
+// mint carrying a quote or a space would reach that renderer inside an href we
+// built.
+const tokenUrl = (mint) =>
+  BASE58.test(String(mint || "")) ? TOKEN_PAGE + encodeURIComponent(mint) : null;
+
 const EXAMPLE_CALL = {
   check_token: { mint: M1 },
   inspect_token: { mint: M1 },
@@ -691,6 +822,8 @@ const EXAMPLE_CALL = {
   kol_record: { address: "CyaE1VxvBrahnPWkqm5VsdCvyS2QmNht2UFrKJHga54o" },
   funder_networks: { min_wallets: 20 },
   search_tokens: { q: "bonk", days: 7 },
+  search: { query: "bonk" },
+  fetch: { id: M1 },
 };
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
@@ -700,6 +833,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     // The four tools that take no arguments carry one too, as an empty call:
     // the check asks whether a tool has an example, not whether it has fields.
     inputSchema: { ...inputSchema, examples: [EXAMPLE_CALL[name] || {}] },
+    // Declaring this obliges us to return structuredContent that matches it,
+    // which the call handler below now does for every tool rather than for
+    // the two ChatGPT asked about.
+    ...(OUTPUT_SCHEMAS[name] ? { outputSchema: OUTPUT_SCHEMAS[name] } : {}),
     annotations: READ_ONLY,
   })),
 }));
@@ -711,13 +848,256 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   }
   try {
     const result = await tool.run(req.params.arguments || {});
-    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    // Modern clients read structuredContent and older ones read the text, so
+    // both carry the same value rather than one summarising the other. ChatGPT
+    // requires exactly this duplication for search and fetch.
+    // Both shapes, always. A tool that declares an outputSchema must return
+    // structuredContent, and the serialized text stays beside it because a
+    // client that predates structured output would otherwise get an empty
+    // answer. This used to be limited to search and fetch, which was the
+    // narrowest reading of "who asked for it": every tool declares a schema
+    // now, so every tool owes the structure.
+    const out = {
+      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+    };
+    // Not for an error body. A 402 or a refusal is a legitimate answer and it
+    // still goes back in full as text, but it shares no field with the shape
+    // this tool declared — and a new install has an empty key, so that is what
+    // twenty-two of these tools return on their very first call. Handing that
+    // back as `structuredContent` invites a client to read a payment challenge
+    // as the data it asked for.
+    if (result && typeof result === "object" && !Array.isArray(result)
+        && !result.error) {
+      out.structuredContent = result;
+    }
+    return out;
   } catch (e) {
     return {
       content: [{ type: "text", text: `Mindjack request failed: ${e.message}` }],
       isError: true,
     };
   }
+});
+
+// ---------------------------------------------------------------------------
+// Resources
+//
+// Four things a caller needs before it can read anything else: what the index
+// holds, what the risk numbers were measured against, what each call costs,
+// and one worked example. All four are free endpoints, so exposing them here
+// costs nobody anything and saves an agent from spending a paid call to find
+// out it was asking the wrong question. They are resources rather than tools
+// because a client can attach them once and cache them, instead of the model
+// having to decide to call them.
+// ---------------------------------------------------------------------------
+const RESOURCES = [
+  {
+    uri: "mindjack://coverage",
+    name: "Index coverage",
+    description:
+      "What we hold and how fresh: the window, the platforms inside it, what " +
+      "is excluded, and a live mint guaranteed to have data. Read this before " +
+      "testing with a token of your own.",
+    mimeType: "application/json",
+    path: "/v1/coverage",
+  },
+  {
+    uri: "mindjack://scorecard",
+    name: "Risk calibration",
+    description:
+      "Every calibrated band with the collapse rate MEASURED for it, its " +
+      "sample size and the window. This is what rug_probability_pct is read " +
+      "against; the safest band still rugs about 35% of the time.",
+    mimeType: "application/json",
+    path: "/v1/scorecard",
+  },
+  {
+    uri: "mindjack://prices",
+    name: "Price list",
+    description:
+      "Every priced route with its price, the asset, the network and the " +
+      "receiving address. The same document an x402 client pays from.",
+    mimeType: "application/json",
+    path: "/.well-known/x402",
+  },
+  {
+    uri: "mindjack://sample",
+    name: "Worked example",
+    description:
+      "One real token answered in full, free: the complete check, inspect and " +
+      "identity bodies with the real price of each. The shape of what you " +
+      "would be buying, before buying it.",
+    mimeType: "application/json",
+    path: "/v1/sample",
+  },
+];
+
+server.setRequestHandler(ListResourcesRequestSchema, async () => ({
+  resources: RESOURCES.map(({ uri, name, description, mimeType }) => ({
+    uri,
+    name,
+    description,
+    mimeType,
+  })),
+}));
+
+server.setRequestHandler(ReadResourceRequestSchema, async (req) => {
+  const found = RESOURCES.find((r) => r.uri === req.params.uri);
+  if (!found) throw new Error("Unknown resource: " + req.params.uri);
+  const body = await call(found.path);
+  return {
+    contents: [
+      {
+        uri: found.uri,
+        mimeType: found.mimeType,
+        text: JSON.stringify(body, null, 2),
+      },
+    ],
+  };
+});
+
+// ---------------------------------------------------------------------------
+// Prompts
+//
+// The orders of calls that are worth running, written down. Each one is the
+// chain a reader would otherwise have had to derive from the whole tool list:
+// which tool first, what to read out of it, and when the next one is worth its
+// price. They take arguments rather than being static text, because a workflow
+// you cannot point at a mint is a tutorial.
+// ---------------------------------------------------------------------------
+const PROMPTS = [
+  {
+    name: "vet_before_buying",
+    description:
+      "The full check on one token before taking a position: structure first, " +
+      "then who is holding it, then whether it can be sold.",
+    arguments: [
+      { name: "mint", description: "Solana mint address.", required: true },
+    ],
+    build: (a) =>
+      [
+        "Decide whether to buy " + a.mint + ". Work in this order and stop",
+        "early if something disqualifies it.",
+        "",
+        "1. check_token on " + a.mint + '. If _meta.coverage is "none" we hold',
+        "   nothing on it: say so and stop, because that is not a clean",
+        "   verdict. Read rug_risk.verdict together with rug_risk.calibration,",
+        "   since the probability is a MEASURED rate for that band and not an",
+        "   opinion. Read collapse_speed too: a token that dies in sixty",
+        "   seconds is a different risk from one that bleeds out over a day.",
+        "2. If it survives that, inspect_token on " + a.mint + " for who is",
+        "   holding it: wallet groups, controlled supply, fresh wallets.",
+        "3. token_identity on " + a.mint + " at the decision point.",
+        "   sibling_outcomes is the field that changes minds: it says how the",
+        "   OTHER tokens these same wallets held ended up. A clean structure",
+        "   with a cohort that rugged sixteen times out of twenty is not a",
+        "   clean token.",
+        "4. can_i_exit on " + a.mint + " before committing. A position you",
+        "   cannot sell at your size is not a position.",
+        "",
+        "Then state the decision, the number that drove it, and what would",
+        "change it. Do not predict a price; we do not publish one.",
+      ].join("\n"),
+  },
+  {
+    name: "find_candidates",
+    description:
+      "Screen recent launches down to the few worth paying for depth on.",
+    arguments: [
+      // MCP prompt arguments are strings on the wire, always. Saying so here
+      // is the difference between a client sending 6 and being refused by
+      // schema validation before the server sees it, and sending "6".
+      {
+        name: "hours",
+        description: "How far back to look, as a string. Default 24.",
+        required: false,
+      },
+      {
+        name: "min_mcap",
+        description: "Minimum market cap in USD, as a string.",
+        required: false,
+      },
+    ],
+    build: (a) =>
+      [
+        "Find launches worth a second look in the last " +
+          (a.hours || 24) +
+          " hours.",
+        "",
+        "1. find_tokens with hours=" + (a.hours || 24),
+        // null, not "": the filter below keeps deliberate blank lines and
+        // drops this one, so an unused optional argument leaves no gap.
+        a.min_mcap ? "   and min_mcap=" + a.min_mcap : null,
+        "   Set max_rug_pct no lower than 40. It is a measured band frequency",
+        "   and the safest band is about 35%, so anything under that returns",
+        "   nothing however wide you make the window.",
+        "2. Rank what comes back by action and rug_probability_pct, but look at",
+        "   volume against market cap as well: the list is ordered by recency,",
+        "   not by opportunity.",
+        "3. check_token the few that read clear. At a tenth of a cent it is",
+        "   cheaper to check than to guess.",
+        "4. token_identity only on the survivors. It is the expensive call and",
+        "   it is the one that changes the answer.",
+        "",
+        "Report the shortlist with the reason each one survived, and say",
+        "plainly if nothing did.",
+      ]
+        // Not filter(Boolean): the empty strings in this list are
+        // deliberate blank lines, and dropping them along with the
+        // unused optional line ran every paragraph together.
+        .filter((line) => line !== null)
+        .join("\n"),
+  },
+  {
+    name: "vet_counterparty",
+    description:
+      "What a wallet has done before: the tokens it held, how they ended, and " +
+      "who funds it.",
+    arguments: [
+      { name: "address", description: "Solana wallet address.", required: true },
+    ],
+    build: (a) =>
+      [
+        "Build a picture of " + a.address + " before dealing with it.",
+        "",
+        "1. check_wallet on " + a.address + " for its record: what it has",
+        "   held, how those ended, and whether it behaves like a sniper or an",
+        "   insider.",
+        "2. wallet_network on " + a.address + " for who funds it and who it",
+        "   moves with. A wallet is rarely alone, and the funder is usually",
+        "   the identity.",
+        "3. If it appears in a token you are looking at, run token_identity on",
+        "   that token as well and see whether this wallet is one of the",
+        "   recurring names or an ordinary holder.",
+        "",
+        "Say what the wallet is, on the evidence, and how confident that is.",
+      ].join("\n"),
+  },
+];
+
+server.setRequestHandler(ListPromptsRequestSchema, async () => ({
+  prompts: PROMPTS.map(({ name, description, arguments: args }) => ({
+    name,
+    description,
+    arguments: args,
+  })),
+}));
+
+server.setRequestHandler(GetPromptRequestSchema, async (req) => {
+  const found = PROMPTS.find((p) => p.name === req.params.name);
+  if (!found) throw new Error("Unknown prompt: " + req.params.name);
+  const args = req.params.arguments || {};
+  for (const a of found.arguments || []) {
+    if (a.required && !args[a.name]) {
+      throw new Error("Prompt " + found.name + " needs " + a.name);
+    }
+  }
+  return {
+    description: found.description,
+    messages: [
+      { role: "user", content: { type: "text", text: found.build(args) } },
+    ],
+  };
 });
 
 await server.connect(new StdioServerTransport());

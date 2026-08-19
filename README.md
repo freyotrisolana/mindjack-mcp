@@ -41,6 +41,7 @@ Prefer to skip keys entirely? The API also speaks
 | `check_token` | $0.001 | Is this one dangerous, and how fast do these collapse |
 | `find_tokens` | $0.005 | Which tokens are worth looking at, verdicts attached |
 | `search_tokens` | $0.005 /page | Find any token we ever analysed, by symbol, name or mint |
+| `search` | $0.005 /page | The same search, shaped for research clients: `{id, title, url}` rows to cite or pass to `fetch` |
 | `inspect_token` | $0.005 | Who is holding it, and what kind of wallets |
 | `token_wallets` | $0.005 | The named wallets behind it: insiders, snipers, fresh, wash, KOLs — with funders and clusters |
 | `token_price_path` | $0.005 | What it did after we called it |
@@ -50,6 +51,7 @@ Prefer to skip keys entirely? The API also speaks
 | `kol_record` | $0.02 | One KOL's full record: per-token history and latest trades |
 | `token_identity` | $0.025 | Who is behind it, and how their earlier tokens ended |
 | `token_report` | $0.025 | Everything on one token in one call; `depth: "full"` is $0.07 |
+| `fetch` | $0.025 | The same report as one document, keyed by the `id` a `search` result gave you |
 | `token_changes` | $0.025 | Who sold since we analysed it (reads the chain now) |
 | `test_hypothesis` | $0.025 | What happened to tokens shaped like this |
 | `find_serial_insiders` | $0.025 / 25 | Who keeps turning up as an insider, across the whole index |
@@ -59,8 +61,60 @@ Prefer to skip keys entirely? The API also speaks
 | `token_graph` | $0.04 | How the holders are connected: edges, clusters, wash wallets |
 | `token_web` | $0.04 | Launches tied to this one through shared wallets, with outcomes and peaks |
 
+`search` and `fetch` are aliases, not extra products: same endpoints, same
+prices, same billing as `search_tokens` and `token_report`. They exist under
+those exact names because ChatGPT's deep research and company knowledge modes
+look for them by name and connect to nothing without them.
+
 Live feeds (new launches, watched wallets, KOL trades) are server-sent event
 streams and do not map to MCP tools — the endpoint guide below covers them.
+
+## Resources
+
+Four read-only documents, all free, attached once rather than called per task.
+A client can cache them; the model does not have to decide to fetch them.
+
+| URI | What it is |
+| --- | --- |
+| `mindjack://coverage` | The window we hold, what is in it, and a live mint guaranteed to have data |
+| `mindjack://scorecard` | Every calibrated band with the collapse rate measured for it and its sample size |
+| `mindjack://prices` | Every priced route with its price, asset, network and receiving address |
+| `mindjack://sample` | One real token answered in full, free, so you can read the shape before buying it |
+
+## Prompts
+
+Three workflows, written down. Each is the order of calls that answers a real
+question, with what to read out of each step and when the next one is worth its
+price.
+
+| Prompt | Arguments | Answers |
+| --- | --- | --- |
+| `vet_before_buying` | `mint` | Should I take a position in this token? |
+| `find_candidates` | `hours`, `min_mcap` (optional) | What launched recently that is worth a closer look? |
+| `vet_counterparty` | `address` | Who is this wallet and what has it done before? |
+
+MCP passes prompt arguments as strings, so send `"6"` rather than `6`.
+
+## Using it
+
+Every tool declares an `outputSchema` and returns `structuredContent` beside
+the text, so a client can validate the answer and plan the next call from the
+field names without paying to discover the shape.
+
+A first run, in the order the server itself recommends:
+
+```
+get_coverage                      -> free; the window, and a mint that works
+find_tokens  hours=24 max_rug_pct=45   -> candidates, each with a measured verdict
+check_token  mint=<from above>    -> $0.001; structure and collapse speed
+token_identity mint=<survivor>    -> $0.025; who is holding it and how their
+                                     other tokens ended
+```
+
+`max_rug_pct` is worth one warning: it is a **measured** collapse frequency for
+a calibrated band, not a score that starts at zero. The safest band we publish
+still rugged about 35% of the time, so a threshold under that matches nothing
+at any window length. The universe base rate is 45%.
 
 ## What makes this different
 

@@ -1,0 +1,11 @@
+# The bin entry is executed through its shebang on macOS and Linux. A CRLF
+# checkout turns "#!/usr/bin/env node" into "#!/usr/bin/env node", and the
+# kernel then looks for an interpreter literally named "node". The package
+# is authored on Windows, so without this the failure is one careless copy
+# away and it never shows up on the machine that made it.
+* text=auto eol=lf
+*.js text eol=lf
+*.mjs text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+LICENSE text eol=lf
