@@ -200,11 +200,14 @@ const TOOLS = [
   {
     name: "check_token",
     description:
-      "[$0.001] Is this Solana token dangerous? Returns a calibrated rug verdict " +
-      "whose probability is a MEASURED frequency (see get_scorecard), the " +
-      "concentration facts behind it, and how fast tokens in this band tend to " +
-      "collapse — the exit window. Use when scanning; cheap enough for every " +
-      "token you see. Not for holder identities: that is inspect_token.",
+      "[$0.001] Is this Solana token dangerous? Returns a calibrated rug " +
+      "verdict whose probability is a MEASURED frequency (see get_scorecard), " +
+      "the concentration facts behind it, and how fast tokens in this band " +
+      "tend to collapse — the exit window. The cheapest call and the first " +
+      "one: use it on every token you see, and let its answer decide whether " +
+      "inspect_token (who holds it), token_identity (who is behind it) or " +
+      "token_report (all three at once) is worth paying for. It does not name " +
+      "holders.",
     inputSchema: {
       type: "object",
       properties: { mint: P_MINT },
@@ -218,7 +221,9 @@ const TOOLS = [
       "[$0.005] Who is involved in this token: top holders and supply, the " +
       "sniper / fresh-wallet / insider / early-buyer split, connected-group " +
       "topology, and tracked-trader activity with direction. Use after " +
-      "check_token flags something.",
+      "check_token flags something. This is the COUNTS-AND-STRUCTURE view of " +
+      "the holders; token_wallets lists them by name, token_graph draws the " +
+      "edges between them, token_web follows them to earlier launches.",
     inputSchema: {
       type: "object",
       properties: { mint: P_MINT },
@@ -230,11 +235,13 @@ const TOOLS = [
     name: "token_report",
     description:
       "[$0.025] Everything we hold on one token, in one call: the calibrated " +
-      "verdict, who is in it, and who is behind it. depth=\"full\" is $0.07 and " +
-      "adds the outcome path, live sellability and the wallet graph. Cheaper " +
-      "than the parts and one round trip instead of three or six. Use once a " +
-      "token is worth a real look; keep using check_token to decide which ones " +
-      "those are.",
+      "verdict, who is in it, and who is behind it — the bundle of " +
+      "check_token, inspect_token and token_identity. depth=\"full\" is $0.07 " +
+      "and adds the outcome path, live sellability and the wallet graph. " +
+      "Cheaper than the parts and one round trip instead of three or six. Use " +
+      "once a token is worth a real look; keep using check_token to decide " +
+      "which ones those are. `fetch` is this same call under the name ChatGPT " +
+      "requires.",
     inputSchema: {
       type: "object",
       properties: {
@@ -267,9 +274,12 @@ const TOOLS = [
   {
     name: "find_tokens",
     description:
-      "[$0.005] Find candidates: recently analysed tokens, each already carrying a " +
-      "verdict, so you can rank locally before paying for depth. Filters: hours " +
-      "(1-168), min_mcap, platform, limit (1-100).",
+      "[$0.005] Find candidates: recently analysed tokens, each already " +
+      "carrying a verdict, so you can rank locally before paying for depth. " +
+      "Filters: hours (1-168), min_mcap, platform, limit (1-100). This " +
+      "answers 'what just migrated' — a time-ordered feed with no query. To " +
+      "find one token you already know by symbol, name or mint, use " +
+      "search_tokens instead.",
     inputSchema: {
       type: "object",
       properties: {
@@ -298,9 +308,12 @@ const TOOLS = [
   {
     name: "check_wallet",
     description:
-      "[$0.006] What we know about a wallet across every token we indexed: how many " +
-      "launches it appeared in, how many ran, which roles it recurs in, and its " +
-      "realised record. Use to vet a large holder or a wallet you might copy.",
+      "[$0.006] What we know about a wallet across every token we indexed: " +
+      "how many launches it appeared in, how many ran, which roles it recurs " +
+      "in, and its realised record. Use to vet a large holder or a wallet you " +
+      "might copy. Works for ANY address; kol_record is the deeper per-trade " +
+      "history for the KOLs we track, and wallet_network is who this wallet " +
+      "moves with rather than what it did.",
     inputSchema: {
       type: "object",
       properties: { address: P_ADDRESS },
@@ -448,12 +461,13 @@ const TOOLS = [
   {
     name: "token_graph",
     description:
-      "[$0.04] The wallet relationship graph behind a token: edges with strength " +
-      "and confidence, cluster membership and role, and wash-trading wallets. " +
-      "inspect_token tells you WHO holds it; this tells you how they are " +
-      "connected, and whether a distributed-looking holder set is really one " +
-      "person. Not a first look — come here when the concentration numbers look " +
-      "wrong and you need the shape.",
+      "[$0.04] The wallet relationship graph behind a token: edges with " +
+      "strength and confidence, cluster membership and role, and wash-trading " +
+      "wallets. inspect_token tells you WHO holds it and token_wallets names " +
+      "them; this tells you how they are CONNECTED, and whether a " +
+      "distributed-looking holder set is really one person. Not a first look " +
+      "— come here when the concentration numbers look wrong and you need the " +
+      "shape.",
     inputSchema: {
       type: "object",
       properties: { mint: P_MINT },
@@ -465,10 +479,12 @@ const TOOLS = [
     name: "token_wallets",
     description:
       "[$0.005] The NAMED wallets behind one token, with their in-coin ties: " +
-      "insiders, snipers, early buyers, fresh wallets, wash traders and tracked " +
-      "KOLs, each carrying its funder (exchanges named), link count and cluster. " +
-      "Lists cap at 100 per class; *_total fields carry the real counts. Use " +
-      "when a count from check_token made you ask WHO.",
+      "insiders, snipers, early buyers, fresh wallets, wash traders and " +
+      "tracked KOLs, each carrying its funder (exchanges named), link count " +
+      "and cluster. Lists cap at 100 per class; *_total fields carry the real " +
+      "counts. Use when a count from check_token or inspect_token made you " +
+      "ask WHO — inspect_token gives the counts and the structure, this gives " +
+      "the addresses.",
     inputSchema: {
       type: "object",
       properties: { mint: P_MINT },
@@ -482,8 +498,9 @@ const TOOLS = [
       "[$0.04] The token's web: earlier launches tied to it through shared " +
       "wallets, with the shared wallets themselves, each connected token's " +
       "outcome and the highest market cap our snapshots recorded. Use when " +
-      "token_identity said this token shares wallets with earlier launches and " +
-      "you need to know which launches and which wallets.",
+      "token_identity said this token shares wallets with earlier launches " +
+      "and you need to know WHICH launches and WHICH wallets. token_graph " +
+      "stays inside one token; this crosses tokens.",
     inputSchema: {
       type: "object",
       properties: {
@@ -506,7 +523,8 @@ const TOOLS = [
       "[$0.025] Who one wallet is wired to, across the whole index: direct " +
       "counterparts with interaction counts, shared tokens and transfer " +
       "direction where the chain shows it, plus a bounded second hop. " +
-      "check_wallet says what it did; this says who it moves with.",
+      "check_wallet says what a wallet DID; this says who it MOVES WITH. For " +
+      "the same question asked of a whole token's holders, use token_graph.",
     inputSchema: {
       type: "object",
       properties: { address: P_ADDRESS },
@@ -547,9 +565,11 @@ const TOOLS = [
     name: "kol_record",
     description:
       "[$0.02] One tracked KOL in depth: lifetime stats, per-token history " +
-      "rolled up from every recorded trade (buys, sells, volume, realized SOL) " +
-      "and the latest trades raw. An address we do not track answers null and " +
-      "costs nothing; check_wallet covers any wallet.",
+      "rolled up from every recorded trade (buys, sells, volume, realized " +
+      "SOL) and the latest trades raw. Only for addresses on our KOL list: an " +
+      "address we do not track answers null and costs nothing — use " +
+      "check_wallet for any other wallet, and kol_leaderboard to find which " +
+      "KOLs we track.",
     inputSchema: {
       type: "object",
       properties: { address: P_ADDRESS },
@@ -584,10 +604,13 @@ const TOOLS = [
   {
     name: "search_tokens",
     description:
-      "[$0.005/page] Find a token anywhere in the analysed catalogue by symbol, " +
-      "name fragment, or exact mint, with platform, size and age filters. The " +
-      "finding aid: it tells you which mint is worth a real call. find_tokens " +
-      "answers 'what just migrated'; this answers 'find me that token'.",
+      "[$0.005/page] Find a token anywhere in the analysed catalogue by " +
+      "symbol, name fragment, or exact mint, with platform, size and age " +
+      "filters. The finding aid: it tells you which mint is worth a real " +
+      "call. find_tokens answers 'what just migrated' with no query; this " +
+      "answers 'find me that token'. `search` is this same call in the {id, " +
+      "title, url} shape ChatGPT requires — prefer search_tokens from every " +
+      "other client.",
     inputSchema: {
       type: "object",
       properties: {
@@ -632,10 +655,13 @@ const TOOLS = [
   {
     name: "search",
     description:
-      "[$0.005/page] Find Solana tokens in the analysed catalogue by symbol, " +
-      "name, or exact mint. Returns {id, title, url} rows; pass an id to " +
-      "`fetch` for the full document. Same endpoint and same price as " +
-      "search_tokens, in the shape research clients expect.",
+      "[$0.005/page] ChatGPT connector entry point: the same catalogue search " +
+      "as search_tokens (same endpoint, same price), returning {id, title, " +
+      "url} rows in the shape ChatGPT's deep research requires, where each id " +
+      "is a Solana mint to pass to `fetch`. ChatGPT connects to nothing " +
+      "without a tool of exactly this name. From any other client, call " +
+      "search_tokens instead — it takes the same query plus platform, size " +
+      "and age filters.",
     inputSchema: {
       type: "object",
       properties: {
@@ -669,11 +695,13 @@ const TOOLS = [
   {
     name: "fetch",
     description:
-      "[$0.025] Everything Mindjack holds on one token as a single document: " +
-      "the calibrated rug verdict with its measured hit rate, who is holding " +
-      "and how they are connected, and whether it can still be sold. Takes an " +
-      "id from `search` — a Solana mint address. Same endpoint and price " +
-      "as token_report.",
+      "[$0.025] ChatGPT connector entry point: everything Mindjack holds on " +
+      "one token as a single document — the calibrated rug verdict with its " +
+      "measured hit rate, who is holding and how they are connected, and " +
+      "whether it can still be sold. Takes an id from `search` (a Solana " +
+      "mint). Same endpoint and price as token_report, which is the name to " +
+      "use from any client other than ChatGPT; ChatGPT requires exactly " +
+      "`fetch`.",
     inputSchema: {
       type: "object",
       properties: {
