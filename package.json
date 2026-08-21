@@ -1,6 +1,6 @@
 {
   "name": "@mindjack/mcp",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "mcpName": "xyz.mindjack/mcp",
   "description": "Solana memecoin rug check and token risk for trading agents, as MCP tools. pump.fun launches and migrations, calibrated rug probability with a published hit rate, sniper / insider / bundle and fresh-wallet detection, holder clusters, KOL trades, wallet history across every launch indexed since March 2026, and a live sellability check.",
   "type": "module",
