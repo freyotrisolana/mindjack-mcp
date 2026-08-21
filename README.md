@@ -1,5 +1,7 @@
 # @mindjack/mcp
 
+[![npm](https://img.shields.io/npm/v/%40mindjack%2Fmcp)](https://www.npmjs.com/package/@mindjack/mcp)
+
 On-chain risk and identity intelligence for Solana tokens, as MCP tools.
 
 ## Install
@@ -155,3 +157,4 @@ and how those ended.
 - Endpoint guide an LLM can read in one fetch: <https://api.mindjack.xyz/llms.txt>
 - OpenAPI: <https://api.mindjack.xyz/v1/openapi.json>
 - Source, issues and releases: <https://github.com/freyotrisolana/mindjack-mcp>
+- Listings: [MCP Registry](https://registry.modelcontextprotocol.io/v0/servers/xyz.mindjack%2Fmcp/versions), [Smithery](https://smithery.ai/servers/mindjack/intel), [verifymcp](https://verifymcp.io/servers/xyz-mindjack-mcp/api)
