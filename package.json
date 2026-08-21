@@ -2,7 +2,7 @@
   "name": "@mindjack/mcp",
   "version": "1.4.0",
   "mcpName": "xyz.mindjack/mcp",
-  "description": "On-chain risk and identity intelligence for Solana tokens, as MCP tools. Calibrated rug verdicts with a published hit rate, named wallets and their networks, the KOL trade ledger, and what happened to every launch we have indexed since March 2026.",
+  "description": "Solana memecoin rug check and token risk for trading agents, as MCP tools. pump.fun launches and migrations, calibrated rug probability with a published hit rate, sniper / insider / bundle and fresh-wallet detection, holder clusters, KOL trades, wallet history across every launch indexed since March 2026, and a live sellability check.",
   "type": "module",
   "bin": {
     "mindjack-mcp": "src/index.js"
@@ -22,7 +22,19 @@
     "model-context-protocol",
     "solana",
     "memecoin",
+    "memecoins",
     "rug",
+    "rug-check",
+    "rugcheck",
+    "pump.fun",
+    "pumpfun",
+    "trenches",
+    "token-risk",
+    "sniper",
+    "insider",
+    "bundle",
+    "kol",
+    "wallet-intelligence",
     "onchain",
     "trading-agent",
     "x402"

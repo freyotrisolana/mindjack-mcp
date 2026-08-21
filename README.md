@@ -2,7 +2,7 @@
 
 [![npm](https://img.shields.io/npm/v/%40mindjack%2Fmcp)](https://www.npmjs.com/package/@mindjack/mcp)
 
-On-chain risk and identity intelligence for Solana tokens, as MCP tools.
+Solana memecoin rug check and token risk for trading agents, as MCP tools: pump.fun launches and migrations, calibrated rug probability, sniper / insider / bundle and fresh-wallet detection, holder clusters, KOL trades, wallet history across every launch indexed, and a live sellability check before you buy. Built for the trenches.
 
 ## Install
 
