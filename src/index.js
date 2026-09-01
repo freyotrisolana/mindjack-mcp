@@ -403,10 +403,14 @@ const TOOLS = [
   {
     name: "test_hypothesis",
     description:
-      "[$0.025] Research, not screening. Describe the shape of token you care about " +
-      "and get what measurably happened to the matching cohort: collapse rate " +
-      "against the base rate, peak-gain percentiles, time to peak, collapse speed. " +
-      "Filters take {min,max} bounds; get_coverage lists the queryable fields.",
+      "[$0.025] Measure what happened to every indexed launch matching your " +
+      "filters: rug rate against the index base rate, peak-gain percentiles, " +
+      "time to peak, collapse speed. Answers pattern questions like 'do " +
+      "launches with under 200 holders die faster?'; to shortlist live tokens " +
+      "to act on, use find_tokens instead. filters is {field: {min,max}} over " +
+      "numeric fields listed by get_coverage, e.g. {total_holders: {min: 200}}. " +
+      "Returns cohort aggregates and a one-sentence finding, never per-token " +
+      "rows. Read-only over stored history; measured past, not a forecast.",
     inputSchema: {
       type: "object",
       properties: {
