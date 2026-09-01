@@ -37,8 +37,24 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
+          # Trusted publishing needs Node 22.14 or newer as well as npm 11.5.1;
+          # "22" resolves to the newest 22.x, which is past both.
           node-version: 22
           registry-url: https://registry.npmjs.org
+
+      # npm publishes whatever package.json says, not what the tag says, so a
+      # release cut against the wrong tag ships a version nobody announced and
+      # the mismatch only surfaces later, in the registry. Cheap to refuse here.
+      - name: tag and package version agree
+        if: github.event_name == 'release'
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          PKG="v$(node -p "require('./package.json').version")"
+          echo "tag=$TAG package=$PKG"
+          if [ "$TAG" != "$PKG" ]; then
+            echo "::error::release tag $TAG does not match package.json $PKG"
+            exit 1
+          fi
 
       # Node 22 ships npm 10, and trusted publishing needs 11.5.1 or newer.
       # Without this line the run fails at the last step with an auth error
